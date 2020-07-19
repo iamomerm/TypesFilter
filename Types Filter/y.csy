@@ -1,0 +1,429 @@
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Text;
+using System.IO;
+using System.Windows.Forms;
+using System.Diagnostics;
+using System.Threading;
+
+namespace Types_Filter
+{
+    public partial class Form1 : Form
+    {
+        public Form1()
+        {
+            InitializeComponent();
+        }
+
+        //Threads
+        Thread ActionThread; /* 1 */
+
+        private void ButtonBrowseClick(object sender, EventArgs e)
+        {
+
+            bool CheckAdmin = IsAdministrator();
+
+            if (CheckAdmin == false)
+            {
+
+                MessageBox.Show
+                    (
+                    "This program must be executed as local admin!"
+                    + Environment.NewLine + 
+                    "Right click - Run as administrator"
+                    , "File Filter (!)"
+                    );
+            }
+
+            else
+            {
+                //Set Flag
+                RecursiveFlag = false;
+
+                //Init Labels
+                LabelFilesFolder.Text = "Files: ";
+                LabelExtensions.Text = "Extensions: ";
+                LabelFolders.Text = "Folders: ";
+                LabelSelExtensions.Text = "Extensions: ";
+                LabelSelFiles.Text = "Files: ";
+                LabelSelMode.Text = "Mode: ";
+
+                //Clear CheckList
+                CheckListFileTypes.Items.Clear();
+
+                using (var folderBrowserDialog = new FolderBrowserDialog())
+                {
+                    //SelectedFolder is the selected folder variable
+
+                    folderBrowserDialog.ShowNewFolderButton = false;
+
+                    DialogResult result = folderBrowserDialog.ShowDialog();
+
+                    string SelectedFolder = folderBrowserDialog.SelectedPath;
+
+                    if (result == DialogResult.OK && !string.IsNullOrWhiteSpace(folderBrowserDialog.SelectedPath))
+                    {
+                        //Folder Path Text set to Selected Folder
+                        this.TextBoxFolderPath.Text = SelectedFolder;
+
+                        //Global Variable Modification
+                        SelectedFolderPath = SelectedFolder;
+
+                        //Enable Scan Button 
+                        this.ButtonScan.Enabled = true;
+
+                        //Enable Select All Button 
+                        this.ButtonSelectAll.Enabled = true;
+
+                        //Enable Clear Selection Button 
+                        this.ButtonClearSelection.Enabled = true;
+
+                        //Enable Recutsive Scan Button 
+                        this.ButtonRecursiveScan.Enabled = true;
+
+                    }
+
+                    else
+                    {
+                        //Folder Path Text is Null
+                        this.TextBoxFolderPath.Text = null;
+
+                        //Global Variable Modification
+                        SelectedFolderPath = null;
+
+                        //Disable Scan Button 
+                        this.ButtonScan.Enabled = false;
+
+                        //Disable Select All Button 
+                        this.ButtonSelectAll.Enabled = false;
+
+                        //Disable Clear Selection Button 
+                        this.ButtonClearSelection.Enabled = false;
+
+                        //Disable Recutsive Scan Button 
+                        this.ButtonRecursiveScan.Enabled = false;
+
+                        //Disable Analyze Button 
+                        this.ButtonAnalyze.Enabled = false;
+
+                        //Disable Remove Button 
+                        this.ButtonRemove.Enabled = false;
+                    }
+                }
+            }
+        }
+
+        //Exit Application Method
+        private void ExitApp() { Application.Exit(); }
+
+        //Scan Method
+        private void Scan()
+        {
+            //Enable Analyze Button 
+            this.ButtonAnalyze.Enabled = true;
+
+            //Enable Remove Button 
+            this.ButtonRemove.Enabled = true;
+
+            //Clear Global Files List
+            RecScanFileList.Clear();
+
+            //Set Flag
+            RecursiveFlag = false;
+
+            //Init Labels
+            this.LabelSelExtensions.Text = "Extensions: ";
+            this.LabelSelFiles.Text = "Files: ";
+            this.LabelSelMode.Text = "Mode: ";
+
+            //Scanning
+            this.LabelFilesFolder.Text = "Files: Scanning...";
+            this.LabelExtensions.Text = "Extensions: Scanning...";
+            this.LabelFolders.Text = "Folders: 1";
+            this.LabelSelMode.Text = "Mode: Scanning...";
+
+            //Clear CheckList
+            this.CheckListFileTypes.Items.Clear();
+            ExtensionList.Clear();
+
+            //Single Folder Scan
+            string[] Files = Directory.GetFiles(SelectedFolderPath);
+
+            //Unique Extensions Added to Extenstion List
+            try
+            {
+                foreach (string File in Files)
+                {
+                    RecScanFileList.Add(File);
+                    string FileExtension = Path.GetExtension(File);
+                    if (ExtensionList.Contains(FileExtension) == false) { ExtensionList.Add(FileExtension); }
+                }
+            }
+
+            catch { }
+            //Add to CheckList
+            int ItemCount = 0;
+            foreach (string Item in ExtensionList)
+            {
+                this.CheckListFileTypes.Items.Insert(ItemCount, Item); ItemCount++;
+            }
+
+            //Set Folder Information
+            LabelFilesFolder.Text = "Files: " + (Files.Count()).ToString();
+            LabelExtensions.Text = "Extensions: " + (ExtensionList.Count()).ToString();
+            if (RecursiveFlag == false) { this.LabelSelMode.Text = "Mode: Non Recursive"; }
+            else { this.LabelSelMode.Text = "Mode: Recursive"; }
+        }
+
+        //Remove Method
+        private void Remove()
+        {
+            //Date
+            DateTime RawDate = DateTime.Today;
+            string DateDay = (RawDate.Day).ToString();
+            string DateMonth = (RawDate.Month).ToString();
+            string DateYear = (RawDate.Year).ToString();
+            string Date = DateMonth + "-" + DateDay + "-" + DateYear;
+            string LogPath = "C:\\Temp\\[FF] Log " + Date + ".txt";
+
+            if (File.Exists(LogPath)) { File.Delete(LogPath); }
+
+            //Count Selected Items
+            foreach (Object SelectedItem in this.CheckListFileTypes.CheckedItems)
+            {
+
+                //Search & Remove Files By Selected Types
+                foreach (string RecScanFile in RecScanFileList)
+                {
+                    string PowerShellCMD = "Write-Host 'Removing file: '" + RecScanFile + "; Remove-Item -Path '" + RecScanFile + "' -Force";
+                    string RemoveFileExtension = Path.GetExtension(RecScanFile);
+
+                    if (RemoveFileExtension == SelectedItem.ToString())
+                    {
+
+                        if (RecScanFile != LogPath)
+                        {
+                            using (StreamWriter LogFile = File.AppendText(LogPath)) { LogFile.WriteLine(RecScanFile); }
+                            System.Diagnostics.Process.Start("powershell.exe", PowerShellCMD);
+                        }
+                    }
+                }
+            }
+
+            //Clear CheckList
+            this.CheckListFileTypes.Items.Clear();
+            RecExtensionList.Clear();
+            ExtensionList.Clear();
+            RecScanFileList.Clear();
+            RecursiveFlag = false;
+
+            //Init Labels
+            this.LabelSelExtensions.Text = "Extensions: ";
+            this.LabelSelFiles.Text = "Files: ";
+            this.LabelSelMode.Text = "Mode: ";
+
+            //Scanning
+            this.LabelFilesFolder.Text = "Files: ";
+            this.LabelExtensions.Text = "Extensions: ";
+            this.LabelFolders.Text = "Folders: ";
+            this.LabelSelMode.Text = "Mode: ";
+
+            //Folder Path Text is Null
+            this.TextBoxFolderPath.Text = null;
+
+            //Global Variable Modification
+            SelectedFolderPath = null;
+
+            //Disable Scan Button 
+            this.ButtonScan.Enabled = false;
+
+            //Disable Select All Button 
+            this.ButtonSelectAll.Enabled = false;
+
+            //Disable Clear Selection Button 
+            this.ButtonClearSelection.Enabled = false;
+
+            //Disable Recutsive Scan Button 
+            this.ButtonRecursiveScan.Enabled = false;
+
+            //Disable Analyze Button 
+            this.ButtonAnalyze.Enabled = false;
+
+            //Disable Remove Button 
+            this.ButtonRemove.Enabled = false;
+
+            //LOG MSG
+            if (File.Exists(LogPath)) { MessageBox.Show("Log file path: " + LogPath); }
+        }
+
+        //Analyze Method
+        private void Analyze()
+        {
+            //Count Selected Items
+            int SelectedItemsCount = 0;
+            int AnalyzeFilesByType = 0;
+
+            foreach (Object SelectedItem in this.CheckListFileTypes.CheckedItems)
+            {
+                SelectedItemsCount++;
+
+                //Count Files By Selected Types
+                foreach (string RecScanFile in RecScanFileList)
+                {
+                    string AnalyzeFileExtension = Path.GetExtension(RecScanFile);
+                    if (AnalyzeFileExtension == SelectedItem.ToString()) { AnalyzeFilesByType++; }
+                }
+            }
+
+            this.LabelSelExtensions.Text = "Extensions: " + (SelectedItemsCount).ToString();
+            this.LabelSelFiles.Text = "Files: " + (AnalyzeFilesByType).ToString();
+        }
+
+        //Recursive Scan Method
+        private void RecScan()
+        {
+            //Enable Analyze Button 
+            this.ButtonAnalyze.Enabled = true;
+
+            //Enable Remove Button 
+            this.ButtonRemove.Enabled = true;
+
+            //Clear Global Files List
+            RecScanFileList.Clear();
+
+            //Set Flag
+            RecursiveFlag = true;
+
+            //Init Labels
+            this.LabelSelExtensions.Text = "Extensions: ";
+            this.LabelSelFiles.Text = "Files: ";
+            this.LabelSelMode.Text = "Mode: ";
+
+            //Scanning
+            this.LabelFilesFolder.Text = "Files: Scanning...";
+            this.LabelExtensions.Text = "Extensions: Scanning...";
+            this.LabelFolders.Text = "Folders: Scanning...";
+            this.LabelSelMode.Text = "Mode: Scanning...";
+
+            //Clear CheckList
+            this.CheckListFileTypes.Items.Clear();
+            RecExtensionList.Clear();
+
+            int RecFilesCount = 0;
+
+            //Single Folder Scan
+            try
+            {
+                string[] SingleFiles = Directory.GetFiles(SelectedFolderPath, "*", SearchOption.AllDirectories);
+
+                //Scan Files - Unique Added to Extenstion List
+
+                foreach (string SingleFile in SingleFiles)
+                {
+                    RecScanFileList.Add(SingleFile);
+                    RecFilesCount++;
+                    string SingleFileExtension = Path.GetExtension(SingleFile);
+                    if (RecExtensionList.Contains(SingleFileExtension) == false) { RecExtensionList.Add(SingleFileExtension); }
+                }
+            }
+
+            catch
+            {
+                MessageBox.Show
+                    (
+                        "Exception:"
+                        + Environment.NewLine +
+                        "- - - - - - -"
+                        + Environment.NewLine +
+                        "File Filter encountered access violation."
+                        + Environment.NewLine +
+                        "To avoid this problem, narrow down the search to a specific directory."
+                        ,
+                        "File Filter (!)"
+                    );
+            }
+
+
+            //Scan Folders
+            int FoldersCount = 0;
+
+            try
+            {
+                string[] Folders = Directory.GetDirectories(SelectedFolderPath, "*", SearchOption.AllDirectories);
+
+                foreach (string Folder in Folders) { FoldersCount++; }
+            }
+
+            catch { /* Pass */ }
+
+            //Add to CheckList
+            int RecItemsCount = 0;
+
+            foreach (string RecItem in RecExtensionList) { this.CheckListFileTypes.Items.Insert(RecItemsCount, RecItem); RecItemsCount++; }
+
+            //Set Folder Information
+            LabelFolders.Text = "Folders: " + (FoldersCount).ToString();
+            LabelFilesFolder.Text = "Files: " + (RecFilesCount).ToString();
+            LabelExtensions.Text = "Extensions: " + (RecExtensionList.Count()).ToString();
+            if (RecursiveFlag == false) { this.LabelSelMode.Text = "Mode: Non Recursive"; }
+            else { this.LabelSelMode.Text = "Mode: Recursive"; }
+        }
+
+        private void ButtonCancelClick(object sender, EventArgs e) { ExitApp(); }
+        
+        private void ButtonSelectAllClick(object sender, EventArgs e)
+        {
+            for (int Index = 0; Index < CheckListFileTypes.Items.Count; Index++)
+            {
+                CheckListFileTypes.SetItemChecked(Index, true);
+            }
+        }
+
+        private void ButtonRecursiveScanClick(object sender, EventArgs e)
+        {
+            ActionThread = new Thread(new ThreadStart(RecScan));
+
+            ActionThread.IsBackground = true;
+
+            ActionThread.Start();           
+        }
+
+        private void ButtonAnalyzeClick(object sender, EventArgs e)
+        {
+            ActionThread = new Thread(new ThreadStart(Analyze));
+
+            ActionThread.IsBackground = true;
+
+            ActionThread.Start();
+        }
+
+        private void ButtonRemoveClick(object sender, EventArgs e)
+        {
+            ActionThread = new Thread(new ThreadStart(Remove));
+
+            ActionThread.IsBackground = true;
+
+            ActionThread.Start();
+        }
+
+        private void ButtonScanClick(object sender, EventArgs e)
+        {
+            ActionThread = new Thread(new ThreadStart(Scan));
+
+            ActionThread.IsBackground = true;
+
+            ActionThread.Start();
+        }
+
+        private void ButtonClearSelectionClick(object sender, EventArgs e)
+        {
+            for (int Index = 0; Index < CheckListFileTypes.Items.Count; Index++) { CheckListFileTypes.SetItemChecked(Index, false);}
+        }
+
+        private void Form1_Load(object sender, EventArgs e) { }
+    }
+}
